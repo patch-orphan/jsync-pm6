@@ -1,52 +1,42 @@
-package JSYNC;
-use 5.008003;
-use strict;
-use warnings;
+module JSYNC;
 
-use JSON;
-# use XXX; # -with => 'Data::Dumper';
-
-our $VERSION = '0.07';
+use JSON::Tiny;
 
 my $next_anchor;
 my $seen;
 
-sub dump {
+sub dump ($object, Bool $pretty?) is export {
+    # TODO: add pretty support when added to JSON
     $next_anchor = 1;
     $seen = {};
-    my $object = shift;
-    my $config = shift || {};
     my $repr = _represent($object);
-    my $json = 'JSON'->new()->canonical();
-    if ($config->{pretty}) {
-        $json->pretty();
-    }
-    my $jsync = $json->encode($repr);
+    my $jsync = to-json($repr);
     return $jsync;
 }
 
-sub load {
+sub load ($jsync) is export {
     $seen = {};
-    my $jsync = shift;
-    my $repr = 'JSON'->new()->decode($jsync);
+    my $repr = from-json($jsync);
     my $object = _construct($repr);
     return $object;
 }
 
-sub _info {
-    if (ref(\$_[0]) eq 'GLOB') {
-        (\$_[0] . "") =~ /^(?:(.+)=)?(GLOB)\((0x.*)\)$/
+# FIXME: incomplete translation to P6
+sub _info ($_*) {
+    if $_[0] ~~ Glob { # FIXME: Glob in not correct
+        (\$_[0] . "") =~ /^ [ ( .+ ) '=' ]? ( GLOB ) '(' ( 0x .* ) ')' $/
             or die "Can't get info for '$_[0]'";
-        return ($3, lc($2), $1 || '');
+        return $2, $1.lc, $0 || '';
     }
-    if (not ref($_[0])) {
-        return (undef, 'scalar', undef);
+    if not ref($_[0]) {
+        return Mu, 'scalar', Mu;
     }
-    "$_[0]" =~ /^(?:(.+)=)?(HASH|ARRAY)\((0x.*)\)$/
+    "$_[0]" =~ /^ [ ( .+ ) '=' ]? ( HASH | ARRAY ) '(' ( 0x .* ) ')' $/
         or die "Can't get info for '$_[0]'";
-    return ($3, lc($2), $1 || '');
+    return $2, $1.lc, $0 || '';
 }
 
+# FIXME: translate to P6
 sub _represent {
     my $node = shift;
     my $repr;
@@ -121,76 +111,71 @@ sub _represent {
     return $repr;
 }
 
-sub _construct {
-    my $repr = shift;
+sub _construct ($repr) {
     my $node;
     my ($id, $kind, $class) = _info($repr);
-    if ($kind eq 'scalar') {
-        if (not defined $repr) {
+    if $kind eq 'scalar' {
+        if not $repr.defined {
             return undef;
         }
-        if ($repr =~ /^\*(\S+)$/) {
-            return $seen->{$1};
+        if $repr =~ /^ '*' ( \S+ ) $/ {
+            return $seen{$0};
         }
         return _unescape($repr);
     }
-    if ($kind eq 'hash') {
+    if $kind eq 'hash' {
         $node = {};
-        if ($repr->{'&'}) {
-            my $anchor = $repr->{'&'};
-            delete $repr->{'&'};
-            $seen->{$anchor} = $node;
+        if $repr<&> {
+            my $anchor = $repr<&>;
+            $repr.delete('&');
+            $seen{$anchor} = $node;
         }
-        if ($repr->{'!'}) {
-            my $class = _resolve_from_tag($repr->{'!'});
-            delete $repr->{'!'};
-            bless $node, $class;
+        if $repr<!> {
+            my $class = _resolve_from_tag($repr<!>);
+            $repr.delete('!');
+            # FIXME: P5 -> P6
+            #bless $node, $class;
         }
-        for my $k (keys %$repr) {
-            $node->{_unescape($k)} = _construct($repr->{$k});
+        for $repr.keys -> $k {
+            $node{_unescape($k)} = _construct($repr{$k});
         }
     }
-    elsif ($kind eq 'array') {
+    elsif $kind eq 'array' {
         $node = [];
-        if (@$repr and defined $repr->[0] and $repr->[0] =~ /^!(.*)$/) {
-            my $class = _resolve_from_tag($1);
-            shift @$repr;
-            bless $node, $class;
+        if $repr.elems and $repr[0].defined and $repr[0] =~ /^ '!' ( .* ) $/ {
+            my $class = _resolve_from_tag($0);
+            $repr.shift;
+            # FIXME: P5 -> P6
+            #bless $node, $class;
         }
-        if (@$repr and $repr->[0] and $repr->[0] =~ /^\&(\S+)$/) {
-            $seen->{$1} = $node;
-            shift @$repr;
+        if $repr.elems and $repr[0] and $repr[0] =~ /^ '&' ( \S+ ) $/ {
+            $seen{$0} = $node;
+            $repr.shift;
         }
-        @$node = map {_construct($_)} @$repr;
+        $node = map {_construct($_)} @$repr;
     }
     return $node;
 }
 
-sub _resolve_to_tag {
-    my ($kind, $class) = @_;
+sub _resolve_to_tag ($kind, $class) {
     return $class && "!perl/$kind\:$class";
 }
 
-sub _resolve_from_tag {
-    my ($tag) = @_;
-    $tag =~ m{^!perl/(?:hash|array|object):(\S+)$}
-      or die "Can't resolve tag '$tag'";
-    return $1;
+sub _resolve_from_tag ($tag) {
+    $tag =~ m{^ '!perl/' [ hash | array | object ] ':' ( \S+ ) $}
+        or die "Can't resolve tag '$tag'";
+    return $0;
 }
 
-sub _escape {
-    my $string = shift;
-    $string =~ s/^(\.*[\!\&\*\%])/.$1/;
+sub _escape ($string) {
+    $string =~ s/^ ( '.'* <[!&*%]> ) /.$0/;
     return $string;
 }
 
-sub _unescape {
-    my $string = shift;
-    $string =~ s/^\.(\.*[\!\&\*\%])/$1/;
+sub _unescape ($string) {
+    $string =~ s/^ '.' ( '.'* <[!&*%]> ) /$0/;
     return $string;
 }
-
-1;
 
 =head1 NAME
 
