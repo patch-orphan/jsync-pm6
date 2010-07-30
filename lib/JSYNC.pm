@@ -23,7 +23,7 @@ sub load ($jsync) is export {
 
 # FIXME: incomplete translation to P6
 sub _info ($_*) {
-    if $_[0] ~~ Glob { # FIXME: Glob in not correct
+    if $_[0] ~~ Glob { # FIXME: Glob not correct
         (\$_[0] . "") =~ /^ [ ( .+ ) '=' ]? ( GLOB ) '(' ( 0x .* ) ')' $/
             or die "Can't get info for '$_[0]'";
         return $2, $1.lc, $0 || '';
@@ -37,69 +37,69 @@ sub _info ($_*) {
 }
 
 # FIXME: translate to P6
-sub _represent {
-    my $node = shift;
+sub _represent ($node) {
     my $repr;
     my ($id, $kind, $class) = _info($node);
-    if ($kind eq 'scalar') {
-        if (not defined $node) {
-            return undef;
+    if $kind eq 'scalar' {
+        if not $node.defined {
+            return Mu;
         }
         return _escape($node);
     }
-    if (my $info = $seen->{$id}) {
-        if (not $info->{anchor}) {
-            $info->{anchor} = $next_anchor++ ."";
-            if ($info->{kind} eq 'hash') {
-                $info->{repr}{'&'} = $info->{anchor};
+    if $seen{$id} -> $info {
+        if not $info<anchor> {
+            $info<anchor> = $next_anchor++ ~ "";
+            if $info<kind> eq 'hash' {
+                $info<repr><&> = $info<anchor>;
             }
             else {
-                unshift @{$info->{repr}}, '&' . $info->{anchor};
+                $info<repr>.unshift("&$info<anchor>");
             }
         }
-        return "*" . $info->{anchor};
+        return "*$info<anchor>";
     }
     my $tag = _resolve_to_tag($kind, $class);
-    if ($kind eq 'array') {
+    if $kind eq 'array' {
         $repr = [];
-        $seen->{$id} = { repr => $repr, kind => $kind };
-        @$repr = map { _represent($_) } @$node;
-        if ($tag) {
-            unshift @$repr, "!$tag";
+        $seen{$id} = { repr => $repr, kind => $kind };
+        $repr = map { _represent($_) } @$node;
+        if $tag {
+            $repr.unshift("!$tag");
         }
     }
-    elsif ($kind eq 'hash') {
+    elsif $kind eq 'hash' {
         $repr = {};
-        $seen->{$id} = { repr => $repr, kind => $kind };
-        for my $k (keys %$node) {
-            $repr->{_represent($k)} = _represent($node->{$k});
+        $seen{$id} = { repr => $repr, kind => $kind };
+        for $node.keys -> $k {
+            $repr{_represent($k)} = _represent($node{$k});
         }
-        if ($tag) {
-            $repr->{'!'} = $tag;
+        if $tag {
+            $repr<!> = $tag;
         }
     }
-    elsif ($kind eq 'glob') {
+    elsif $kind eq 'glob' {
         $class ||= 'main';
         $repr = {};
-        $repr->{PACKAGE} = $class;
-        $repr->{'!'} = '!perl/glob:';
-        for my $type (qw(PACKAGE NAME SCALAR ARRAY HASH CODE IO)) {
-            my $value = *{$node}{$type};
-            $value = $$value if $type eq 'SCALAR';
-            if (defined $value) {
-                if ($type eq 'IO') {
-                    my @stats = qw(device inode mode links uid gid rdev size
-                                   atime mtime ctime blksize blocks);
-                    undef $value;
-                    $value->{stat} = {};
-                    map {$value->{stat}{shift @stats} = $_} stat(*{$node});
-                    $value->{fileno} = fileno(*{$node});
+        $repr<PACKAGE> = $class;
+        $repr<!> = '!perl/glob:';
+        for <PACKAGE NAME SCALAR ARRAY HASH CODE IO> -> $type {
+            my $value = *{$node}{$type}; # FIXME: *{} not correct 
+            $value = $$value if $type eq 'SCALAR'; # FIXME: this line needed?
+            if $value.defined {
+                if $type eq 'IO' {
+                    my @stats = <device inode mode links uid gid rdev size
+                                   atime mtime ctime blksize blocks>;
+                    $value = Mu;
+                    $value<stat> = {};
+                    # FIXME: stat(), fileno(), tell(), and *{}
+                    map {$value<stat>{@stats.shift} = $_} stat(*{$node});
+                    $value<fileno> = fileno(*{$node});
                     {
-                        local $^W;
-                        $value->{tell} = tell(*{$node});
+                        local $*WARNINGS; # FIXME: review
+                        $value<tell> = tell(*{$node});
                     }
                 }
-                $repr->{$type} = $value;
+                $repr{$type} = $value;
             }
         }
 
@@ -116,7 +116,7 @@ sub _construct ($repr) {
     my ($id, $kind, $class) = _info($repr);
     if $kind eq 'scalar' {
         if not $repr.defined {
-            return undef;
+            return Mu;
         }
         if $repr =~ /^ '*' ( \S+ ) $/ {
             return $seen{$0};
