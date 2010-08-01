@@ -1,11 +1,6 @@
-use TestML -run, -bridge => 't::Bridge';
+use TestML::Runner::TAP;
 
-__DATA__
-%TestML: 1.0
-%Title: Ingy's Test
-%Plan: 7
-%Data: jsync-yaml.tml
-%PointMarker: +++
-
-*jsync.load_jsync().dump_yaml() == *yaml;
-
+TestML::Runner::TAP.new(
+    document => 'load.tml',
+    bridge   => 't::Bridge',
+).run();

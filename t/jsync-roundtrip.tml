@@ -25,4 +25,3 @@
 === Schwern's Escaping Test
 +++ jsync
 {".!":"not a type","..!":"not an escaped type","foo":"42"}
-

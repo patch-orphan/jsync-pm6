@@ -1,10 +1,6 @@
-use TestML -run, -bridge => 't::Bridge';
+use TestML::Runner::TAP;
 
-__DATA__
-%TestML: 1.0
-%Title: Ingy's Test
-%Plan: 7
-%Data: jsync-roundtrip.tml
-%PointMarker: +++
-
-*jsync.load_jsync().dump_jsync() == *jsync.chomp();
+TestML::Runner::TAP.new(
+    document => 'roundtrip.tml',
+    bridge   => 't::Bridge',
+).run();

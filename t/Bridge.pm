@@ -1,38 +1,33 @@
-package t::Bridge;
-use TestML::Bridge -base;
+module t::Bridge;
+
 use JSYNC;
-use YAML::XS;
+use YAML;
 
-sub load_jsync {
-    my ($self) = @_;
-    return JSYNC::load($self->value);
+sub load_jsync ($this) {
+    return JSYNC::load($this.value);
 }
 
-sub dump_jsync {
-    my ($self) = @_;
-    return JSYNC::dump($self->value);
+sub dump_jsync ($this) {
+    return JSYNC::dump($this.value);
 }
 
-sub load_yaml {
-    my ($self) = @_;
-    return YAML::XS::Load($self->value);
+sub load_yaml ($this) {
+    return YAML::load($this.value);
 }
 
-sub dump_yaml {
-    my ($self) = @_;
-    return YAML::XS::Dump($self->value);
+sub dump_yaml ($this) {
+    return YAML::dump($this.value);
 }
 
-sub chomp {
-    my ($self) = @_;
-    my $str = $self->value;
-    chomp($str);
+sub chomp ($this) {
+    my $str = $this.value;
+    $str.=chomp;
     return $str;
 }
 
-sub eval {
-    my ($self) = @_;
-    return eval($self->value);
+sub eval_perl ($this) {
+    return eval $this.value;
+    CATCH {
+        return "$!";
+    }
 }
-
-1;
